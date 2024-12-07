@@ -1,0 +1,10 @@
+{
+    "api_key": "sk-xxx",
+    "api_url": "https://api.example.com",
+    "model": "gpt-4o-mini",
+    "temperature": 0.9,
+    "keep_history": false,
+    "custom_prompt": "你是一个专业的文本续写助手...",
+    "hotkey": "alt+b",
+    "assistant_hotkey": "alt+r"
+} 
