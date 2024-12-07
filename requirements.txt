@@ -1,0 +1,5 @@
+keyboard>=0.13.5
+Pillow>=9.5.0
+pystray>=0.19.5
+pywin32>=225
+requests>=2.31.0
