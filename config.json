@@ -6,5 +6,5 @@
     "keep_history": false,
     "custom_prompt": "你是一个专业的文本续写助手...",
     "hotkey": "alt+b",
-    "assistant_hotkey": "alt+r"
+    "assistant_hotkey": "alt+q"
 } 
