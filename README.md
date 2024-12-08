@@ -14,13 +14,18 @@ ChatFree 是一个基于 Python 开发的 AI 辅助工具，集成了智能文�
 ## 📸 功能展示
 
 <div align="center">
-<img src="assets/screenshot1.png" alt="主界面" width="600"/>
-<p>主界面</p>
+<img src="assets/screenshot1.png" alt="主窗口" width="600"/>
+<p>主窗口</p>
 </div>
 
 <div align="center">
-<img src="assets/screenshot2.png" alt="设置界面" width="600"/>
-<p>设置界面</p>
+<img src="assets/screenshot2.png" alt="AI助手" width="600"/>
+<p>AI助手</p>
+</div>
+
+<div align="center">
+<img src="https://user-images.githubusercontent.com/38237931/230600283-d0b5e55f-5b07-44fa-b8e6-751ce300d1ee.gif" alt="文本补全" width="600"/>
+<p>文本补全</p>
 </div>
 
 ## 📦 安装部署
@@ -51,7 +56,6 @@ python main.py
 - pywin32: Windows系统API封装
   - 提供剪贴板访问功能
   - 支持系统代理设置读取
-  - 用于注册表操作
 
 ### 构建说明
 
