@@ -19,12 +19,12 @@ ChatFree 是一个基于 Python 开发的 AI 辅助工具，集成了智能文�
 </div>
 
 <div align="center">
-<img src="assets/screenshot2.png" alt="AI助手" width="600"/>
+<img src="assets/summarize.gif" alt="AI助手" width="600"/>
 <p>AI助手</p>
 </div>
 
 <div align="center">
-<img src="https://user-images.githubusercontent.com/38237931/230600283-d0b5e55f-5b07-44fa-b8e6-751ce300d1ee.gif" alt="文本补全" width="600"/>
+<img src="assets/complete.gif" alt="文本补全" width="600"/>
 <p>文本补全</p>
 </div>
 
