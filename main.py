@@ -9,13 +9,15 @@ import os
 import time
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-import keyboard
 import win32clipboard
 from ai_api import ChatSession
 import pystray
 from PIL import Image
 import threading
 import ctypes
+from pynput import keyboard as pynput_keyboard
+from pynput.keyboard import Key, KeyCode
+import keyboard 
 
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('ChatFree')
 
@@ -104,7 +106,7 @@ class DialogWindow:
         if selected_text:
             self.append_message("系统", "您选中的文本是:")
             self.append_message("文本", selected_text)
-            self.append_message("系统", "您可以选择翻译解释或询问相关问题。")
+            self.append_message("系统", "您可以选择翻译解释总结或询问相关问题。")
         else:
             self.btn_translate['state'] = 'disabled'
             self.btn_explain['state'] = 'disabled'
@@ -267,7 +269,7 @@ class ChatFreeApp:
         title_frame = ttk.Frame(main_frame)
         title_frame.pack(fill='x', padx=20, pady=(20,10))
         ttk.Label(title_frame, text="ChatFree", font=("Arial", 24, "bold")).pack(side='left')
-        ttk.Label(title_frame, text="v0.2.8", font=("Arial", 12)).pack(side='left', padx=(10,0), pady=8)
+        ttk.Label(title_frame, text="v0.3.5", font=("Arial", 12)).pack(side='left', padx=(10,0), pady=8)
         
         intro_frame = ttk.LabelFrame(main_frame, text="功能介绍")
         intro_frame.pack(fill='x', padx=20, pady=10)
@@ -373,8 +375,9 @@ class ChatFreeApp:
         
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        self.bind_hotkey()
-        keyboard.add_hotkey(self.assistant_hotkey, self.show_dialog)
+        self.keyboard_listener = None
+        self.current_keys = set()
+        self.setup_keyboard_listener()
         
     def setup_tray(self):
         """设置系统托盘"""
@@ -404,7 +407,8 @@ class ChatFreeApp:
     def quit_app(self, icon=None):
         """退出应用"""
         try:
-            keyboard.unhook_all_hotkeys()
+            if self.keyboard_listener:
+                self.keyboard_listener.stop()
             
             if self.icon_thread and self.icon_thread.is_alive():
                 self.icon.stop()
@@ -412,7 +416,7 @@ class ChatFreeApp:
             self.master.destroy()
             os._exit(0)
         except Exception as e:
-            print(f"退出时发错误: {str(e)}")
+            print(f"退出时发生错误: {str(e)}")
             os._exit(1)
         
     def on_closing(self):
@@ -479,14 +483,6 @@ class ChatFreeApp:
         
         threading.Thread(target=fetch_models, daemon=True).start()
     
-    def bind_hotkey(self):
-        """绑定快捷键"""
-        try:
-            keyboard.remove_hotkey(self.hotkey)
-        except:
-            pass
-        keyboard.add_hotkey(self.hotkey, self.complete)
-
     def load_config(self):
         """加载配置"""
         try:
@@ -537,61 +533,173 @@ class ChatFreeApp:
         new_hotkey = self.ent_hotkey.get()
         new_assistant_hotkey = self.ent_assistant_hotkey.get()
         
-        if new_hotkey != self.hotkey:
-            self.hotkey = new_hotkey
-            self.bind_hotkey()
-        
-        if new_assistant_hotkey != self.assistant_hotkey:
-            keyboard.remove_hotkey(self.assistant_hotkey)
-            self.assistant_hotkey = new_assistant_hotkey
-            keyboard.add_hotkey(self.assistant_hotkey, self.show_dialog)
+        self.hotkey = new_hotkey
+        self.assistant_hotkey = new_assistant_hotkey
         
         self.save_config()
         
         self.btn_submit["text"] = "保存成功"
         self.master.after(700, lambda: self.btn_submit.configure(text="保存设置"))
 
+    def setup_keyboard_listener(self):
+        """设置键盘监听器"""
+        def on_press(key):
+            try:
+                print(f"按下按键: {key}") 
+                self.current_keys.add(key)
+                
+                if self.check_hotkey(self.hotkey):
+                    print("触发补全快捷键")
+                    self.complete()
+                if self.check_hotkey(self.assistant_hotkey):
+                    print("触发助手快捷键")
+                    self.show_dialog()
+                    
+            except Exception as e:
+                print(f"按键处理错误: {str(e)}")
+
+        def on_release(key):
+            try:
+                print(f"释放按键: {key}")
+                self.current_keys.discard(key)
+            except Exception as e:
+                print(f"按键释放错误: {str(e)}")
+
+        self.keyboard_listener = pynput_keyboard.Listener(
+            on_press=on_press,
+            on_release=on_release)
+        self.keyboard_listener.start()
+
+    def check_hotkey(self, hotkey_str):
+        """检查快捷键是否被按下"""
+        try:
+            required_keys = set()
+            parts = hotkey_str.lower().split('+')
+            
+            for k in parts:
+                if k == 'ctrl':
+                    required_keys.add(Key.ctrl_l)
+                    required_keys.add(Key.ctrl_r)
+                elif k == 'alt':
+                    required_keys.add(Key.alt_l)
+                    required_keys.add(Key.alt_r)
+                elif k == 'shift':
+                    required_keys.add(Key.shift_l)
+                    required_keys.add(Key.shift_r)
+                elif len(k) == 1:
+                    required_keys.add(KeyCode.from_char(k))
+                else:
+                    print(f"不支持的按键: {k}")
+                    return False
+
+            modifiers = {'ctrl': (Key.ctrl_l, Key.ctrl_r), 
+                        'alt': (Key.alt_l, Key.alt_r),
+                        'shift': (Key.shift_l, Key.shift_r)}
+            
+            for mod in modifiers:
+                if mod in parts:
+                    if not any(k in self.current_keys for k in modifiers[mod]):
+                        return False
+                else:
+                    if any(k in self.current_keys for k in modifiers[mod]):
+                        return False
+
+            for k in parts:
+                if k not in ['ctrl', 'alt', 'shift']:
+                    if not any(isinstance(current_key, KeyCode) and 
+                             hasattr(current_key, 'char') and 
+                             current_key.char and 
+                             current_key.char.lower() == k for current_key in self.current_keys):
+                        return False
+
+            return True
+            
+        except Exception as e:
+            print(f"检查快捷键错误: {str(e)}")
+            return False
+
     def get_selected_text(self):
         """获取选中的文本"""
-        win32clipboard.OpenClipboard()
+        print("开始获取选中文本")
+        
+        old_clipboard = ''
         try:
-            old_clipboard = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
-        except:
-            old_clipboard = ''
-        win32clipboard.CloseClipboard()
-
-        hotkey_parts = self.hotkey.lower().split('+')
-
-        while any(keyboard.is_pressed(key) for key in hotkey_parts):
-            time.sleep(0.1)
-
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.CloseClipboard()
-
-        time.sleep(0.3)
-        keyboard.press_and_release('ctrl+c')
-        time.sleep(0.5)
-
-        max_attempts = 3
-        selected_text = None
-        for _ in range(max_attempts):
+            win32clipboard.OpenClipboard()
             try:
-                win32clipboard.OpenClipboard()
-                selected_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
-                win32clipboard.CloseClipboard()
-                if not selected_text.strip():
-                    selected_text = None
-                break
+                old_clipboard = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                print(f"保存原始剪贴板内容: {old_clipboard}")
             except:
+                print("原始剪贴板为空")
+            win32clipboard.CloseClipboard()
+        except Exception as e:
+            print(f"获取原始剪贴板失败: {e}")
+            try:
                 win32clipboard.CloseClipboard()
-                time.sleep(0.3)
+            except:
+                pass
 
-        if old_clipboard:
+        try:
             win32clipboard.OpenClipboard()
             win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(old_clipboard)
             win32clipboard.CloseClipboard()
+        except Exception as e:
+            print(f"清空剪贴板失败: {e}")
+            try:
+                win32clipboard.CloseClipboard()
+            except:
+                pass
+
+        keyboard = pynput_keyboard.Controller()
+        try:
+            keyboard.release(Key.ctrl)
+            keyboard.release(Key.shift)
+            keyboard.release(Key.alt)
+            
+            time.sleep(0.1)
+
+            with keyboard.pressed(Key.ctrl):
+                keyboard.press('c')
+                time.sleep(0.1)
+                keyboard.release('c')
+            time.sleep(0.2)
+        except Exception as e:
+            print(f"模拟按键失败: {e}")
+
+        selected_text = None
+        max_attempts = 3
+        for i in range(max_attempts):
+            try:
+                win32clipboard.OpenClipboard()
+                try:
+                    selected_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                    if selected_text and selected_text.strip():
+                        print(f"成功获取选中文本: {selected_text}")
+                        win32clipboard.CloseClipboard()
+                        break
+                except Exception as e:
+                    print(f"第{i+1}次获取文本失败: {e}")
+                    win32clipboard.CloseClipboard()
+            except Exception as e:
+                print(f"第{i+1}次打开剪贴板失败: {e}")
+                try:
+                    win32clipboard.CloseClipboard()
+                except:
+                    pass
+            time.sleep(0.2)
+
+        if old_clipboard:
+            try:
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardText(old_clipboard)
+                win32clipboard.CloseClipboard()
+                print("已恢复原始剪贴板内容")
+            except Exception as e:
+                print(f"恢复剪贴板失败: {e}")
+                try:
+                    win32clipboard.CloseClipboard()
+                except:
+                    pass
 
         return selected_text
 
@@ -600,11 +708,13 @@ class ChatFreeApp:
         try:
             selected_text = self.get_selected_text()
             if not selected_text:
-                print("未能获取到选中的文本，请重试")
+                print("未获取到选中文本")
                 return
 
-            print("您选择补全的文本:\t", selected_text)
+            print(f"开始补全文本: {selected_text}")
+            
             keyboard.press_and_release('right')
+            
             msg = "【请稍等，等待补全】"
             keyboard.write(msg)
 
@@ -619,11 +729,13 @@ class ChatFreeApp:
                     }                    
                 )
 
-            for i in range(len(msg)):
+            for _ in range(len(msg)):
                 keyboard.press_and_release('backspace')
+
             msg = " << 请勿其它操作，长按ctrl键终止】"
             keyboard.write("【" + msg)
-            for i in range(len(msg)):
+            
+            for _ in range(len(msg)):
                 keyboard.press_and_release('left')
 
             if not self.keep_history:
@@ -632,31 +744,30 @@ class ChatFreeApp:
             response = self.chat_session.chat(selected_text, temperature=self.temperature)
 
             if response.startswith(("\n发生错误", "request error", "API请求错误")):
-                print(f"\n{response}")
+                print(f"API错误: {response}")
                 keyboard.write(f" >> {response}")
                 return
 
             for char in response:
                 if keyboard.is_pressed('ctrl'):
-                    print("\n--用户终止")
                     keyboard.write(" >> 用户终止")
+                    keyboard.release('ctrl')
                     return
-                print(char, end="", flush=True)
                 keyboard.write(char)
                 time.sleep(0.01)
 
-            print()
             keyboard.write("】")
-            for i in range(len(msg)):
+
+            for _ in range(len(msg)):
                 keyboard.press_and_release('delete')
 
         except Exception as e:
-            print(f"发生错误: {str(e)}")
+            print(f"补全过程发生错误: {str(e)}")
             return
 
     def show_dialog(self):
         """显示对话窗口"""
-        try:
+        try:         
             selected_text = None
             try:
                 selected_text = self.get_selected_text()
@@ -684,4 +795,3 @@ if __name__ == '__main__':
     root = tk.Tk()
     app = ChatFreeApp(root)
     root.mainloop()
-    keyboard.unhook_all_hotkeys()
