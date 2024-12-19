@@ -184,7 +184,7 @@ class DialogWindow:
         self.btn_translate['state'] = 'disabled'
         prompt = f"请将以下文本翻译成中文:\n{self.selected_text}"
         self.append_message("用户", "请求翻译:")
-        self.append_message("文本", self.selected_text)
+        # self.append_message("文本", self.selected_text)
         
         response = self.chat_session.chat(prompt)
         if response:
@@ -197,7 +197,7 @@ class DialogWindow:
         self.btn_explain['state'] = 'disabled'
         prompt = f"请解释以下文本的含义:\n{self.selected_text}"
         self.append_message("用户", "请求解释:")
-        self.append_message("文本", self.selected_text)
+        # self.append_message("文本", self.selected_text)
         
         response = self.chat_session.chat(prompt)
         if response:
@@ -210,7 +210,7 @@ class DialogWindow:
         self.btn_summarize['state'] = 'disabled'
         prompt = f"请对以下文本进行概括总结:\n{self.selected_text}"
         self.append_message("用户", "请求总结:")
-        self.append_message("文本", self.selected_text)
+        # self.append_message("文本", self.selected_text)
         
         response = self.chat_session.chat(prompt)
         if response:
@@ -235,6 +235,17 @@ class ChatFreeApp:
     def __init__(self, master):
         self.master = master
         self.master.title("ChatFree")
+        
+        self.preset_apis = {
+            "OpenAI": "https://api.openai.com",
+            "Gemini": "https://generativelanguage.googleapis.com",
+            "Grok": "https://api.x.ai", 
+            "DeepSeek": "https://api.deepseek.com",
+            "智谱AI": "https://open.bigmodel.cn",
+            "豆包": "https://ark.cn-beijing.volces.com",
+            "通义千问": "https://dashscope.aliyuncs.com/compatible-mode",
+            "自定义": ""
+        }
         
         self.master.withdraw()
         
@@ -269,7 +280,7 @@ class ChatFreeApp:
         title_frame = ttk.Frame(main_frame)
         title_frame.pack(fill='x', padx=20, pady=(20,10))
         ttk.Label(title_frame, text="ChatFree", font=("Arial", 24, "bold")).pack(side='left')
-        ttk.Label(title_frame, text="v0.3.5", font=("Arial", 12)).pack(side='left', padx=(10,0), pady=8)
+        ttk.Label(title_frame, text="v0.3.6", font=("Arial", 12)).pack(side='left', padx=(10,0), pady=8)
         
         intro_frame = ttk.LabelFrame(main_frame, text="功能介绍")
         intro_frame.pack(fill='x', padx=20, pady=10)
@@ -327,10 +338,30 @@ class ChatFreeApp:
         self.ent_apikey.pack(pady=(0,5))
         
         ttk.Label(api_frame, text="API URL:").pack(anchor='w')
-        self.ent_base_url = ttk.Entry(api_frame, width=52)
-        self.ent_base_url.insert(0, self.base_url)
-        self.ent_base_url.pack(pady=(0,5))
-        
+        url_frame = ttk.Frame(api_frame)
+        url_frame.pack(fill='x', pady=(0,5))
+
+        self.cmb_api_type = ttk.Combobox(url_frame, width=10)
+        self.cmb_api_type['values'] = list(self.preset_apis.keys())
+        self.cmb_api_type.bind('<<ComboboxSelected>>', self.on_api_selected)
+        self.cmb_api_type.pack(side='left', padx=(15,5))
+
+        self.ent_base_url = ttk.Entry(url_frame, width=38)
+        self.ent_base_url.pack(side='left', padx=(0,15))
+
+        if hasattr(self, 'base_url') and self.base_url:
+            current_api = next((k for k,v in self.preset_apis.items() 
+                               if v in self.base_url), None)
+            if current_api:
+                self.cmb_api_type.set(current_api)
+                self.ent_base_url.insert(0, self.base_url)
+            else:
+                self.cmb_api_type.set("自定义")
+                self.ent_base_url.insert(0, self.base_url)
+        else:
+            self.cmb_api_type.set("OpenAI")
+            self.ent_base_url.insert(0, self.preset_apis["OpenAI"])
+
         ttk.Label(api_frame, text="Temperature:").pack(anchor='w')
         self.ent_temperature = ttk.Entry(api_frame, width=52)
         self.ent_temperature.insert(0, str(self.temperature))
@@ -433,6 +464,19 @@ class ChatFreeApp:
             elif result is False:
                 self.hide_window()
     
+    def on_api_selected(self, event):
+        """处理API选择事件"""
+        selected = self.cmb_api_type.get()
+        
+        self.ent_base_url.config(state='normal')
+        self.ent_base_url.delete(0, 'end')
+        
+        if selected == "自定义":
+            self.ent_base_url.focus()
+        else:
+            self.ent_base_url.insert(0, self.preset_apis[selected])
+            self.ent_base_url.config(state='readonly')
+                
     def update_models(self):
         """更新模型列表"""
         def fetch_models():
@@ -490,7 +534,15 @@ class ChatFreeApp:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                     self.apikey = config.get('api_key')
-                    self.base_url = config.get('api_url')
+                    
+                    self.selected_api = config.get('selected_api', 'OpenAI')
+                    custom_url = config.get('custom_url', '')
+                    
+                    if self.selected_api == "自定义":
+                        self.base_url = custom_url
+                    else:
+                        self.base_url = self.preset_apis.get(self.selected_api, self.preset_apis['OpenAI'])
+                    
                     self.model = config.get('model')
                     self.temperature = config.get('temperature', 0.9)
                     self.keep_history = config.get('keep_history', False)
@@ -498,15 +550,18 @@ class ChatFreeApp:
                     self.hotkey = config.get('hotkey', 'ctrl+alt+\\')
                     self.assistant_hotkey = config.get('assistant_hotkey', 'alt+r')
             else:
-                pass
+                self.selected_api = 'OpenAI'
+                self.base_url = self.preset_apis['OpenAI']
         except Exception as e:
             print(f"加载配置文件失败: {str(e)}")
 
     def save_config(self):
         """保存配置"""
+        selected_api = self.cmb_api_type.get()
         config = {
             'api_key': self.apikey,
-            'api_url': self.base_url,
+            'selected_api': selected_api,
+            'custom_url': self.base_url if selected_api == "自定义" else "",
             'model': self.model,
             'temperature': self.temperature,
             'keep_history': self.keep_history,
@@ -524,7 +579,13 @@ class ChatFreeApp:
     def submit(self):
         """保存设置"""
         self.apikey = self.ent_apikey.get()
-        self.base_url = self.ent_base_url.get()
+        selected_api = self.cmb_api_type.get()
+        
+        if selected_api == "自定义":
+            self.base_url = self.ent_base_url.get()
+        else:
+            self.base_url = self.preset_apis[selected_api]
+        
         self.model = self.model_var.get()
         self.temperature = float(self.ent_temperature.get())
         self.keep_history = self.keep_history_var.get()
@@ -535,7 +596,7 @@ class ChatFreeApp:
         
         self.hotkey = new_hotkey
         self.assistant_hotkey = new_assistant_hotkey
-        
+                
         self.save_config()
         
         self.btn_submit["text"] = "保存成功"
@@ -545,7 +606,7 @@ class ChatFreeApp:
         """设置键盘监听器"""
         def on_press(key):
             try:
-                print(f"按下按键: {key}") 
+                # print(f"按下按键: {key}") 
                 self.current_keys.add(key)
                 
                 if self.check_hotkey(self.hotkey):
@@ -560,7 +621,7 @@ class ChatFreeApp:
 
         def on_release(key):
             try:
-                print(f"释放按键: {key}")
+                # print(f"释放按键: {key}")
                 self.current_keys.discard(key)
             except Exception as e:
                 print(f"按键释放错误: {str(e)}")
@@ -718,16 +779,15 @@ class ChatFreeApp:
             msg = "【请稍等，等待补全】"
             keyboard.write(msg)
 
-            if self.chat_session is None:
-                self.chat_session = ChatSession(
-                    api_key=self.apikey,
-                    base_url=self.base_url,
-                    model=self.model,
-                    system_prompt={
-                        "role": "system", 
-                        "content": self.custom_prompt
-                    }                    
-                )
+            self.chat_session = ChatSession(
+                api_key=self.apikey,
+                base_url=self.base_url,
+                model=self.model,
+                system_prompt={
+                    "role": "system", 
+                    "content": self.custom_prompt
+                }                    
+            )
 
             for _ in range(len(msg)):
                 keyboard.press_and_release('backspace')
