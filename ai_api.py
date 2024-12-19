@@ -26,14 +26,28 @@ class ChatSession:
         :param system_prompt: 系统提示，用于设定AI角色
         """
         base_url = base_url.rstrip('/')
-        if not '/v1/chat/completions' in base_url:
-            if '/v1' in base_url:
-                base_url = base_url.split('/v1')[0] + '/v1/chat/completions'
-            else:
-                base_url = f"{base_url}/v1/chat/completions"
+        
+        if 'googleapis.com' in base_url.lower():
+            self.base_url = f"{base_url}/v1beta/chat/completions"
+        elif 'bigmodel.cn' in base_url.lower():
+            self.base_url = f"{base_url}/api/paas/v4/chat/completions"
+        elif 'volces.com' in base_url.lower():
+            self.base_url = f"{base_url}/api/v3/chat/completions"    
+        else:
+            if not base_url.startswith(('http://', 'https://')):
+                base_url = 'https://' + base_url
+                
+            if not '/chat/completions' in base_url.lower():              
+                if '/v1' in base_url:
+                    base_url = f"{base_url}/chat/completions"
+                else:
+                    base_url = f"{base_url}/v1/chat/completions"
+                    
+                print(f"已添加标准endpoint -> {base_url}")
+                
+            self.base_url = base_url
         
         self.api_key = api_key
-        self.base_url = base_url
         self.model = model
         self.system_prompt = system_prompt
         self.message_history = []
@@ -118,21 +132,45 @@ class ChatSession:
 
     def get_models(self):
         """获取可用的模型列表"""
-        models_url = self.base_url.replace('/chat/completions', '/models')
-        
-        try:
-            response = requests.get(
-                models_url,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                proxies=get_proxy(),
-                verify=True,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                models = response.json()
-                return [model['id'] for model in models['data']]
-            return []
-        except Exception as e:
-            print(f"获取模型列表失败: {str(e)}")
-            return []
+        if 'googleapis.com' in self.base_url:
+            models_url = "https://generativelanguage.googleapis.com/v1beta/models"
+            try:
+                response = requests.get(
+                    models_url,
+                    params={'key': self.api_key},
+                    proxies=get_proxy(),
+                    verify=True,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    models = response.json()
+                    return [model['name'].split('models/')[1] for model in models['models']]
+                return []
+            except Exception as e:
+                print(f"获取Gemini模型列表失败: {str(e)}")
+                return []
+        elif 'bigmodel.cn' in self.base_url.lower():
+            return ['GLM-4-Flash', 'GLM-4-Plus', 'GLM-4V-Flash', 'GLM-4V-Plus']
+        elif 'volces.com' in self.base_url.lower():
+            models_url = "https://ark.cn-beijing.volces.com/api/v3/models"
+            return ['请填入格式ep-20241219144352-xxxxxx的接入点ID']
+        else:
+            base_url = self.base_url.split('/chat/completions')[0]
+            models_url = f"{base_url}/models"
+            try:
+                response = requests.get(
+                    models_url,
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    proxies=get_proxy(),
+                    verify=True,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    models = response.json()
+                    return [model['id'] for model in models['data']]
+                return []
+            except Exception as e:
+                print(f"获取模型列表失败: {str(e)}")
+                return []
