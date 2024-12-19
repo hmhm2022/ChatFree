@@ -1,10 +1,11 @@
 {
     "api_key": "sk-xxx",
-    "api_url": "https://api.example.com",
+    "selected_api": "OpenAI",
+    "custom_url": "",
     "model": "gpt-4o-mini",
     "temperature": 0.9,
     "keep_history": false,
-    "custom_prompt": "你是一个专业的文本续写助手...",
+    "custom_prompt": "你是一个专业的文本续写助手。你会仔细分析用户文本的写作风格、情感和主题，保持相同的语言风格和表达方式，确保内容的连贯性和逻辑性，补全内容控制在150字以内，直接开始，不要重复用户的话。",
     "hotkey": "alt+b",
     "assistant_hotkey": "alt+q"
 } 
